@@ -1,77 +1,47 @@
-
-# coding: utf-8
-
-# '''
-# A Reccurent Neural Network (LSTM) implementation example using TensorFlow library.
-# This example is using the MNIST database of handwritten digits (http://yann.lecun.com/exdb/mnist/)
-# Long Short Term Memory paper: http://deeplearning.cs.cmu.edu/pdfs/Hochreiter97_lstm.pdf
-# 
-# Author: Aymeric Damien
-# Project: https://github.com/aymericdamien/TensorFlow-Examples/
-# '''
-
-# In[1]:
-
 import tensorflow as tf
 from tensorflow.contrib import rnn
-import numpy as np
 
-print("Loading data...")
-X = np.load("talks.npy")
-print("Shape of X:", X.shape)
-Y = np.load("keywords.npy")
-print("Shape of y:", Y.shape)
-E = np.load("embedding.npy")
-print("Shape of E:", Y.shape)
+import reader
 
-Y_train = Y[:1585]
-X_train = X[:1585]
-
-Y_validation = Y[1585:1835]
-X_validation = X[1585:1835]
-
-Y_test = Y[1835:]
-X_test = X[1835:]
-
-
-# '''
-# To classify images using a reccurent neural network, we consider every image
-# row as a sequence of pixels. Because MNIST image shape is 28*28px, we will then
-# handle 28 sequences of 28 steps for every sample.
-# '''
-
-# In[3]:
 
 # Parameters
 learning_rate = 0.001
-epochs = 10
-batch_size = 50
-display_step = 10
+epochs = 50
+batch_size = 30
+display_step = 1
 
 # Network Parameters
 n_input = 50
-n_steps = X.shape[1] # timesteps
+# n_steps = X.shape[1] # timesteps
 n_hidden = 128 # hidden layer num of features
-n_classes = Y.shape[1] # total classes
+n_size = 50
+n_classes = 8 # total classes
+
+
+# Read and process the data
+E, X_dict, y_dict = reader.get_raw_data(1585, 250)
+batches = reader.make_batches(X_dict["train"], y_dict["train"], batch_size)
+
 
 # tf Graph input
-x = tf.placeholder("float", [None, n_steps, n_input])
+x = tf.placeholder("int32", [None, None])
 y = tf.placeholder("float", [None, n_classes])
+keep_prob = tf.placeholder(tf.float32)
 
 # Define weights
 weights = {
-    'out': tf.Variable(tf.random_normal([n_hidden, n_classes]))
+    'W': tf.Variable(tf.random_normal([n_hidden, n_size])),
+    'V': tf.Variable(tf.random_normal([n_size, n_classes]))
 }
 biases = {
-    'out': tf.Variable(tf.random_normal([n_classes]))
+    'b': tf.Variable(tf.random_normal([n_size])),
+    'c': tf.Variable(tf.random_normal([n_classes]))
 }
 
-
-# In[ ]:
 
 def RNN(x, embedding, weights, biases):
 #     # Get embeddings for the talk
-#     x = tf.nn.embedding_lookup(embedding, x)
+    x = tf.nn.embedding_lookup(embedding, x)
 #     print(tf.shape(x))
     
 #     x = tf.unstack(x, num=n_steps, axis=1)
@@ -82,21 +52,29 @@ def RNN(x, embedding, weights, biases):
     # Required shape: 'n_steps' tensors list of shape (batch_size, n_input)
     print("Creating the network")
     
-    # Permuting batch_size and n_steps
+#     # Permuting batch_size and n_steps
     x = tf.transpose(x, [1, 0, 2])
-    # Reshaping to (n_steps*batch_size, n_input)
-    x = tf.reshape(x, [-1, n_input])
-    # Split to get a list of 'n_steps' tensors of shape (batch_size, n_input)
-    x = tf.split(x, n_steps, 0)
+#     # Reshaping to (n_steps*batch_size, n_input)
+#     x = tf.reshape(x, [-1, n_input])
+#     # Split to get a list of 'n_steps' tensors of shape (batch_size, n_input)
+#     x = tf.split(x, n_steps, 0)
 
     # Define a lstm cell with tensorflow
     lstm_cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0)
     print("Creating the static rnn")
     # Get lstm cell output
-    outputs, states = rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
+    # outputs, states = rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
+    outputs, states = tf.nn.dynamic_rnn(lstm_cell, x, time_major=True, dtype=tf.float32)
+    print(tf.shape(outputs))
+    
+    z = tf.reduce_mean(outputs, 0)
+    h = tf.nn.tanh(tf.matmul(z, weights['W']) + biases['b'])
+    
+    # Dropout layer
+    h_drop = tf.nn.dropout(h, keep_prob)
 
     # Linear activation, using rnn inner loop last output
-    return tf.matmul(outputs[-1], weights['out']) + biases['out']
+    return tf.matmul(h_drop, weights['V']) + biases['c']
 
 pred = RNN(x, E, weights, biases)
 print("Created the network")
@@ -110,36 +88,35 @@ accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
 # Initializing the variables
 init = tf.global_variables_initializer()
+print("Finished creating the model.")
 
 
-# In[6]:
+# In[ ]:
 
 # Launch the graph
 with tf.Session() as sess:
     sess.run(init)
     for i in range(epochs):
-        for j in range(32):
-            batch_x = X_train[(j%batch_size)+i*batch_size: (j%batch_size)+(i+1)*batch_size]
-            batch_y = Y_train[(j%batch_size)+i*batch_size: (j%batch_size)+(i+1)*batch_size]
-            
+        for batch_x, batch_y in batches:
             # Run optimization op (backprop)
-            sess.run(optimizer, feed_dict={x: batch_x, y: batch_y})
-            if step % display_step == 0:
-                # Calculate batch accuracy
-                acc = sess.run(accuracy, feed_dict={x: batch_x, y: batch_y})
-                # Calculate batch loss
-                loss = sess.run(cost, feed_dict={x: batch_x, y: batch_y})
-                print ("Iter", step*batch_size, ", Minibatch Loss=",
-                      "{:.6f}".format(loss), ", Training Accuracy=", "{:.5f}".format(acc))
+            sess.run(optimizer, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
+        if i % display_step == 0:
+            # Calculate batch accuracy
+            acc = sess.run(accuracy, feed_dict={x: batch_x, y: batch_y, keep_prob: 1})
+            # Calculate batch loss
+            # loss = sess.run(cost, feed_dict={x: X_train, y: Y_train, keep_prob: 1})
+            print ("Epochs:", i, ",", "Training Accuracy=", "{:.5f}".format(acc))
 
     print ("Optimization Finished!")
 
     # Calculate accuracy for 128 mnist test images
-    test_len = 128
-    test_data = mnist.test.images[:test_len].reshape((-1, n_steps, n_input))
-    test_label = mnist.test.labels[:test_len]
-    print ("Testing Accuracy:",
-            sess.run(accuracy, feed_dict={x: test_data, y: test_label}))
+#     print ("Testing Accuracy:",
+#             sess.run(accuracy, feed_dict={x: X_test, y: Y_test, keep_prob: 1}))
+
+
+# In[8]:
+
+tf.reset_default_graph()
 
 
 # In[ ]:
