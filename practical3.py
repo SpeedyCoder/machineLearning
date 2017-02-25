@@ -1,26 +1,37 @@
 import tensorflow as tf
 from tensorflow.contrib import rnn
+import numpy as np
 
 import reader
+from graph_maker import make_learning_curve
 
+from time import time
+
+start = time()
 
 # Parameters
 learning_rate = 0.001
-epochs = 50
-batch_size = 30
+epochs = 500
+batch_size = 50
 display_step = 1
+MAX_SIZE = 500
 
 # Network Parameters
 n_input = 50
 # n_steps = X.shape[1] # timesteps
-n_hidden = 128 # hidden layer num of features
-n_size = 50
+n_hidden = 50 # hidden layer num of features
+n_size = 30
 n_classes = 8 # total classes
 
 
 # Read and process the data
-E, X_dict, y_dict = reader.get_raw_data(1585, 250)
-batches = reader.make_batches(X_dict["train"], y_dict["train"], batch_size)
+E, X_dict, y_dict = reader.get_raw_data(1585, 250, MAX_SIZE=MAX_SIZE)
+batches_train = reader.make_batches(X_dict["train"], y_dict["train"], batch_size)
+X_train, y_train = reader.make_array(X_dict["train"], y_dict["train"])
+X_validate, y_validate = reader.make_array(X_dict["validate"], y_dict["validate"])
+X_test, y_test = reader.make_array(X_dict["test"], y_dict["test"])
+del (X_dict, y_dict)
+print("Data processed.")
 
 
 # tf Graph input
@@ -90,36 +101,38 @@ accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 init = tf.global_variables_initializer()
 print("Finished creating the model.")
 
-
-# In[ ]:
-
+accs_train = []
+accs_validate = []
 # Launch the graph
 with tf.Session() as sess:
     sess.run(init)
     for i in range(epochs):
-        for batch_x, batch_y in batches:
+        # Calculate batch accuracy
+        acc_train = sess.run(accuracy, feed_dict={x: X_train, y: y_train, keep_prob: 1})
+        acc_validate = sess.run(accuracy, feed_dict={x: X_validate, y: y_validate, keep_prob: 1})
+        print ("Epoch:", i, ",", "Training Accuracy=", "{:.5f}".format(acc_train),
+               "Validation Accuracy=", "{:.5f}".format(acc_validate))
+        accs_train.append(acc_train)
+        accs_validate.append(acc_validate)
+
+        for batch_x, batch_y in batches_train:
             # Run optimization op (backprop)
             sess.run(optimizer, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
-        if i % display_step == 0:
-            # Calculate batch accuracy
-            acc = sess.run(accuracy, feed_dict={x: batch_x, y: batch_y, keep_prob: 1})
-            # Calculate batch loss
-            # loss = sess.run(cost, feed_dict={x: X_train, y: Y_train, keep_prob: 1})
-            print ("Epochs:", i, ",", "Training Accuracy=", "{:.5f}".format(acc))
+            
 
     print ("Optimization Finished!")
 
-    # Calculate accuracy for 128 mnist test images
-#     print ("Testing Accuracy:",
-#             sess.run(accuracy, feed_dict={x: X_test, y: Y_test, keep_prob: 1}))
+    print ("Testing Accuracy:",
+            sess.run(accuracy, feed_dict={x: X_test, y: y_test, keep_prob: 1}))
 
+np.save("accs_train", accs_train)
+np.save("accs_validate", accs_validate)
 
-# In[8]:
+make_learning_curve("lstm.png", range(0, epochs), accs_train, accs_validate, "training", "validation")
 
-tf.reset_default_graph()
+end = time()
+print("Finished in:", end - start, "seconds")
 
-
-# In[ ]:
 
 
 

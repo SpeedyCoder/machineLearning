@@ -48,7 +48,7 @@ def _process_talk(talk):
     return talk_tokens
 
 
-def _talks_to_vec_seq(word_to_id, talks):
+def _talks_to_vec_seq(word_to_id, talks, MAX_SIZE=None):
     print("Converting talks to vectors...")
     def to_id(word):
         if word in word_to_id:
@@ -56,7 +56,10 @@ def _talks_to_vec_seq(word_to_id, talks):
         else:
             return 1
 
-    return [[to_id(word) for word in talk] for talk in talks]
+    if MAX_SIZE is None:
+        return [[to_id(word) for word in talk] for talk in talks]
+    else:
+        return[[to_id(word) for i, word in enumerate(talk) if i < MAX_SIZE] for talk in talks]
 
 
 def _make_glove_embedding(talks):
@@ -81,7 +84,7 @@ def _make_glove_embedding(talks):
     return index_map, np.array(mat)
 
 
-def get_raw_data(n_train, n_validate):
+def get_raw_data(n_train, n_validate, MAX_SIZE=None):
     # Download the dataset if it's not already there: this may take a minute as it is 75MB
     if not os.path.isfile('ted_en-20160408.zip'):
         print("Downloading the data...")
@@ -101,7 +104,7 @@ def get_raw_data(n_train, n_validate):
     talks = list(map(_process_talk, talks))
 
     index_map, E = _make_glove_embedding(talks[:n_train])
-    talks = _talks_to_vec_seq(index_map, talks)
+    talks = _talks_to_vec_seq(index_map, talks, MAX_SIZE=MAX_SIZE)
 
     talks_dict = {
         "train": talks[:n_train],
@@ -134,6 +137,10 @@ def make_batches(talks, keywords, batch_size):
         batches.append((talks_batch, keywords_batch))
 
     return batches
+
+def make_array(talks, keywords):
+    batch = make_batches(talks, keywords, len(talks))
+    return batch[0]
 
 # import numpy as np
 
