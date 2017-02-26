@@ -11,7 +11,7 @@ start = time()
 
 # Parameters
 learning_rate = 0.001
-epochs = 500
+epochs = 100
 batch_size = 50
 display_step = 1
 MAX_SIZE = 1000
@@ -20,7 +20,7 @@ MAX_SIZE = 1000
 n_input = 50
 n_steps = 100
 n_hidden = 50 # hidden layer num of features
-n_size = 800
+n_size = 400
 n_classes = 8 # total classes
 
 
