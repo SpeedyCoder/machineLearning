@@ -84,7 +84,7 @@ def _make_glove_embedding(talks):
     return index_map, np.array(mat)
 
 
-def get_raw_data(n_train, n_validate, MAX_SIZE=None):
+def get_raw_data(n_train, n_validate, n_test, MAX_SIZE=None):
     # Download the dataset if it's not already there: this may take a minute as it is 75MB
     if not os.path.isfile('ted_en-20160408.zip'):
         print("Downloading the data...")
@@ -109,13 +109,13 @@ def get_raw_data(n_train, n_validate, MAX_SIZE=None):
     talks_dict = {
         "train": talks[:n_train],
         "validate": talks[n_train: n_train+n_validate],
-        "test": talks[n_train+n_validate:]
+        "test": talks[n_train+n_validate: n_train+n_validate+n_test]
     }
 
     keywords_dict = {
         "train": keywords[:n_train],
         "validate": keywords[n_train: n_train+n_validate],
-        "test": keywords[n_train+n_validate:]
+        "test": keywords[n_train+n_validate: n_train+n_validate+n_test]
     }
     
     return E, talks_dict, keywords_dict

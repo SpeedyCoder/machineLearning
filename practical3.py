@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.contrib import rnn
 import numpy as np
+import math
 
 import reader
 from graph_maker import make_learning_curve
@@ -11,25 +12,25 @@ start = time()
 
 # Parameters
 learning_rate = 0.001
-epochs = 500
+epochs = 10
 batch_size = 50
 display_step = 1
-MAX_SIZE = 500
+MAX_SIZE = 1000
 
 # Network Parameters
 n_input = 50
-# n_steps = X.shape[1] # timesteps
+n_steps = 100
 n_hidden = 50 # hidden layer num of features
-n_size = 30
+n_size = 800
 n_classes = 8 # total classes
 
 
 # Read and process the data
-E, X_dict, y_dict = reader.get_raw_data(1585, 250, MAX_SIZE=MAX_SIZE)
+E, X_dict, y_dict = reader.get_raw_data(1500, 250, 250, MAX_SIZE=MAX_SIZE)
 batches_train = reader.make_batches(X_dict["train"], y_dict["train"], batch_size)
-X_train, y_train = reader.make_array(X_dict["train"], y_dict["train"])
-X_validate, y_validate = reader.make_array(X_dict["validate"], y_dict["validate"])
-X_test, y_test = reader.make_array(X_dict["test"], y_dict["test"])
+batches_validate = reader.make_batches(X_dict["validate"], y_dict["validate"], batch_size)
+batches_test = reader.make_batches(X_dict["test"], y_dict["test"], batch_size)
+
 del (X_dict, y_dict)
 print("Data processed.")
 
@@ -50,35 +51,50 @@ biases = {
 }
 
 
-def RNN(x, embedding, weights, biases):
-#     # Get embeddings for the talk
-    x = tf.nn.embedding_lookup(embedding, x)
-#     print(tf.shape(x))
-    
-#     x = tf.unstack(x, num=n_steps, axis=1)
-#     print(tf.shape(x))
+def RNN(inp, embedding, weights, biases):
+    # Get embeddings for the talk
+    x = tf.nn.embedding_lookup(embedding, inp)
+    x = tf.nn.dropout(x, keep_prob)
+
+    print("Creating the network")
+    # Permuting batch_size and n_steps
+    # x = tf.transpose(x, [1, 0, 2])
+    # inputs = tf.unstack(x, num=MAX_SIZE, axis=1)
 
     # Prepare data shape to match `rnn` function requirements
     # Current data input shape: (batch_size, n_steps, n_input)
     # Required shape: 'n_steps' tensors list of shape (batch_size, n_input)
-    print("Creating the network")
     
-#     # Permuting batch_size and n_steps
+    # Permuting batch_size and n_steps
     x = tf.transpose(x, [1, 0, 2])
-#     # Reshaping to (n_steps*batch_size, n_input)
-#     x = tf.reshape(x, [-1, n_input])
-#     # Split to get a list of 'n_steps' tensors of shape (batch_size, n_input)
-#     x = tf.split(x, n_steps, 0)
+    # Reshaping to (n_steps*batch_size, n_input)
+    x = tf.reshape(x, [-1, n_input])
+    # Split to get a list of 'n_steps' tensors of shape (batch_size, n_input)
+    inputs = tf.split(x, MAX_SIZE, 0)
+
+    parts = math.ceil(MAX_SIZE/n_steps)
+    print("Parts:", parts)
+    # splits = tf.split(x, math.ceil(MAX_SIZE/n_steps), axis=0)
 
     # Define a lstm cell with tensorflow
-    lstm_cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0)
-    print("Creating the static rnn")
-    # Get lstm cell output
-    # outputs, states = rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
-    outputs, states = tf.nn.dynamic_rnn(lstm_cell, x, time_major=True, dtype=tf.float32)
-    print(tf.shape(outputs))
-    
+    cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0)
+    state = cell.zero_state(batch_size, tf.float32)
+
+    print("Creating the truncated rnn")
+    outputs = []
+    result = {}
+    with tf.variable_scope("TBPTT"):
+        for i in range(parts):
+            if i > 0: tf.get_variable_scope().reuse_variables()
+            result[i], state = rnn.static_rnn(cell, inputs[n_steps*i:n_steps*(i+1)],
+                                              initial_state=state)
+            # result[i], state = tf.nn.dynamic_rnn(cell, x[:,n_steps*i:n_steps*(i+1),:], time_major=True, 
+            #                                   dtype=tf.float32, initial_state=state)
+            outputs.append(result[i])
+
+    outputs = tf.concat(outputs, 0)
     z = tf.reduce_mean(outputs, 0)
+
     h = tf.nn.tanh(tf.matmul(z, weights['W']) + biases['b'])
     
     # Dropout layer
@@ -101,6 +117,15 @@ accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 init = tf.global_variables_initializer()
 print("Finished creating the model.")
 
+def get_accuracy(batches):
+    acc = 0
+    for batch_x, batch_y in batches:
+        acc += sess.run(accuracy, feed_dict={x: batch_x, y: batch_y, keep_prob: 1})
+
+    return acc/len(batches)
+
+
+
 accs_train = []
 accs_validate = []
 # Launch the graph
@@ -108,8 +133,8 @@ with tf.Session() as sess:
     sess.run(init)
     for i in range(epochs):
         # Calculate batch accuracy
-        acc_train = sess.run(accuracy, feed_dict={x: X_train, y: y_train, keep_prob: 1})
-        acc_validate = sess.run(accuracy, feed_dict={x: X_validate, y: y_validate, keep_prob: 1})
+        acc_train = get_accuracy(batches_train)
+        acc_validate = get_accuracy(batches_validate)
         print ("Epoch:", i, ",", "Training Accuracy=", "{:.5f}".format(acc_train),
                "Validation Accuracy=", "{:.5f}".format(acc_validate))
         accs_train.append(acc_train)
@@ -122,8 +147,7 @@ with tf.Session() as sess:
 
     print ("Optimization Finished!")
 
-    print ("Testing Accuracy:",
-            sess.run(accuracy, feed_dict={x: X_test, y: y_test, keep_prob: 1}))
+    print ("Testing Accuracy:", get_accuracy(batches_test))
 
 np.save("accs_train", accs_train)
 np.save("accs_validate", accs_validate)
