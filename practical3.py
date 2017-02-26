@@ -76,9 +76,9 @@ def RNN(inp, embedding, weights, biases):
     # splits = tf.split(x, math.ceil(MAX_SIZE/n_steps), axis=0)
 
     # Define a lstm cell with tensorflow
-    # cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0)
+    cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0)
     # cell = rnn.BasicRNNCell(n_hidden)
-    cell = rnn.GRUCell(n_hidden)
+    # cell = rnn.GRUCell(n_hidden)
     state = cell.zero_state(batch_size, tf.float32)
 
     print("Creating the truncated rnn")
@@ -94,9 +94,9 @@ def RNN(inp, embedding, weights, biases):
             outputs.append(result[i])
 
     outputs = tf.concat(outputs, 0)
-    z = tf.reduce_mean(outputs, 0)
+    # z = tf.reduce_mean(outputs, 0)
 
-    h = tf.nn.tanh(tf.matmul(z, weights['W']) + biases['b'])
+    h = tf.nn.tanh(tf.matmul(outputs[-1], weights['W']) + biases['b'])
     
     # Dropout layer
     h_drop = tf.nn.dropout(h, keep_prob)
