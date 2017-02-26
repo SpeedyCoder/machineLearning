@@ -4,7 +4,6 @@ import numpy as np
 import math
 
 import reader
-from graph_maker import make_learning_curve
 
 from time import time
 
@@ -12,7 +11,7 @@ start = time()
 
 # Parameters
 learning_rate = 0.001
-epochs = 10
+epochs = 500
 batch_size = 50
 display_step = 1
 MAX_SIZE = 1000
@@ -151,8 +150,6 @@ with tf.Session() as sess:
 
 np.save("accs_train", accs_train)
 np.save("accs_validate", accs_validate)
-
-make_learning_curve("lstm.png", range(0, epochs), accs_train, accs_validate, "training", "validation")
 
 end = time()
 print("Finished in:", end - start, "seconds")
