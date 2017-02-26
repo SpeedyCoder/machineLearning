@@ -68,7 +68,7 @@ def _make_glove_embedding(talks):
     index = 0
     mat = [np.zeros(50, dtype=np.float32), np.zeros(50, dtype=np.float32)]
     words = set(flatten(talks))
-    with open('glove.6B.50d.txt') as f:
+    with open('glove.6B.50d.txt', encoding='utf-8') as f:
         for line in f:
             vec = line.split()
             word = vec.pop(0)
