@@ -77,7 +77,8 @@ def RNN(inp, embedding, weights, biases):
 
     # Define a lstm cell with tensorflow
     # cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0)
-    cell = rnn.BasicRNNCell(n_hidden)
+    # cell = rnn.BasicRNNCell(n_hidden)
+    cell = rnn.GRUCell(n_hidden)
     state = cell.zero_state(batch_size, tf.float32)
 
     print("Creating the truncated rnn")
