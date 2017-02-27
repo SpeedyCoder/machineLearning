@@ -5,6 +5,9 @@ import re
 import urllib.request
 import zipfile
 import lxml.etree
+from nltk.corpus import stopwords
+
+english = stopwords.words('english')
 
 
 def flatten(l):
@@ -45,7 +48,13 @@ def _process_talk(talk):
         tokens = re.sub(r"[^a-z0-9]+", " ", sent_str.lower()).split()
         talk_tokens.extend(tokens)
 
-    return talk_tokens
+    # for stopword in english:
+    #     print(stopword)
+    #     talk_tokens = filter(lambda x: x != stopword, talk_tokens)
+
+    talk_tokens = [word for word in talk_tokens if word not in english]
+
+    return (talk_tokens)
 
 
 def _talks_to_vec_seq(word_to_id, talks, MAX_SIZE=None):
@@ -101,7 +110,14 @@ def get_raw_data(n_train, n_validate, n_test, MAX_SIZE=None):
 
     # Process keywords
     keywords = np.array(list(map(_make_label, keywords)))
-    talks = list(map(_process_talk, talks))
+    res = []
+    for i, talk in enumerate(talks):
+        res.append(_process_talk(talk))
+
+        if i%100 == 0:
+            print(i, "talks done")
+    talks = res
+    # print(max(map(len, talks))) => 2941
 
     index_map, E = _make_glove_embedding(talks[:n_train])
     talks = _talks_to_vec_seq(index_map, talks, MAX_SIZE=MAX_SIZE)

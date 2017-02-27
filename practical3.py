@@ -10,7 +10,7 @@ from time import time
 start = time()
 
 # Parameters
-learning_rate = 0.001
+learning_rate = 0.0001
 epochs = 100
 batch_size = 50
 display_step = 1
@@ -26,6 +26,18 @@ n_classes = 8 # total classes
 
 # Read and process the data
 E, X_dict, y_dict = reader.get_raw_data(1500, 250, 250, MAX_SIZE=MAX_SIZE)
+count  = 0
+
+# np.save("E", E)
+# np.save("X_train", X_dict["train"])
+# np.save("X_validate", X_dict["validate"])
+# np.save("X_test", X_dict["test"])
+# np.save("y_train", y_dict["train"])
+# np.save("y_validate", y_dict["validate"])
+# np.save("y_test", y_dict["test"])
+
+# print((y_dict["validate"][:,0] == 1).sum()/250)
+# exit()
 batches_train = reader.make_batches(X_dict["train"], y_dict["train"], batch_size)
 batches_validate = reader.make_batches(X_dict["validate"], y_dict["validate"], batch_size)
 batches_test = reader.make_batches(X_dict["test"], y_dict["test"], batch_size)
@@ -76,10 +88,11 @@ def RNN(inp, embedding, weights, biases):
     # splits = tf.split(x, math.ceil(MAX_SIZE/n_steps), axis=0)
 
     # Define a lstm cell with tensorflow
-    cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0)
+    # cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=False)
     # cell = rnn.BasicRNNCell(n_hidden)
-    # cell = rnn.GRUCell(n_hidden)
+    cell = rnn.GRUCell(n_hidden)
     state = cell.zero_state(batch_size, tf.float32)
+    print(tf.shape(state))
 
     print("Creating the truncated rnn")
     outputs = []
@@ -87,16 +100,17 @@ def RNN(inp, embedding, weights, biases):
     with tf.variable_scope("TBPTT"):
         for i in range(parts):
             if i > 0: tf.get_variable_scope().reuse_variables()
-            result[i], state = rnn.static_rnn(cell, inputs[n_steps*i:n_steps*(i+1)],
-                                              initial_state=state)
+            result[i], state = rnn.static_rnn(cell, inputs[n_steps*i:n_steps*(i+1)], initial_state=state)
             # result[i], state = tf.nn.dynamic_rnn(cell, x[:,n_steps*i:n_steps*(i+1),:], time_major=True, 
             #                                   dtype=tf.float32, initial_state=state)
+            print("here")
+            state = tf.stop_gradient(state)
             outputs.append(result[i])
 
     outputs = tf.concat(outputs, 0)
-    # z = tf.reduce_mean(outputs, 0)
+    z = tf.reduce_mean(outputs, 0)
 
-    h = tf.nn.tanh(tf.matmul(outputs[-1], weights['W']) + biases['b'])
+    h = tf.nn.tanh(tf.matmul(z, weights['W']) + biases['b'])
     
     # Dropout layer
     h_drop = tf.nn.dropout(h, keep_prob)
