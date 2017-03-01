@@ -4,14 +4,16 @@ import numpy as np
 import math
 
 import reader
+from balancer import Balancer
+from collections import Counter
 
 from time import time
 
 start = time()
 
 # Parameters
-learning_rate = 0.0001
-epochs = 100
+learning_rate = 0.001
+epochs = 200
 batch_size = 50
 display_step = 1
 MAX_SIZE = 1000
@@ -20,24 +22,40 @@ MAX_SIZE = 1000
 n_input = 50
 n_steps = 100
 n_hidden = 50 # hidden layer num of features
-n_size = 400
+n_size = 30
 n_classes = 8 # total classes
+
+# reg_weights = tf.constant(np.zeros(8, dtype=np.float32))
+# y = tf.placeholder("float", [batch_size, n_classes])
+# x = tf.placeholder("float", [batch_size, n_classes])
+# z = tf.placeholder("float", [3])
+# weight = tf.reduce_sum(reg_weights*y, axis=1)
+# cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=x, labels=y)*weight)
+
+# exit()
 
 
 # Read and process the data
-E, X_dict, y_dict = reader.get_raw_data(1500, 250, 250, MAX_SIZE=MAX_SIZE)
-count  = 0
+E, X_dict, y_dict = reader.get_raw_data(1550, 250, 250, MAX_SIZE=MAX_SIZE)
+print(len(X_dict["train"]), len(X_dict["train"][0]))
 
-# np.save("E", E)
-# np.save("X_train", X_dict["train"])
-# np.save("X_validate", X_dict["validate"])
-# np.save("X_test", X_dict["test"])
-# np.save("y_train", y_dict["train"])
-# np.save("y_validate", y_dict["validate"])
-# np.save("y_test", y_dict["test"])
+reg_weights = np.zeros(8, dtype=np.float32)
+for c in range(8):
+    reg_weights[c] = (y_dict["train"][:,c] == 1).sum()
 
-# print((y_dict["validate"][:,0] == 1).sum()/250)
-# exit()
+validation_counts = [0 for _ in range(8)]
+for c in range(8):
+    validation_counts[c] = int((y_dict["validate"][:,c] == 1).sum())
+print(validation_counts)
+ 
+print(reg_weights)
+
+reg_weights = 1 + np.log(reg_weights.max()) - np.log(reg_weights)
+
+print(reg_weights)
+reg_weights = tf.constant(reg_weights.T)
+
+balancer = Balancer(X_dict["train"], y_dict["train"])
 batches_train = reader.make_batches(X_dict["train"], y_dict["train"], batch_size)
 batches_validate = reader.make_batches(X_dict["validate"], y_dict["validate"], batch_size)
 batches_test = reader.make_batches(X_dict["test"], y_dict["test"], batch_size)
@@ -47,8 +65,8 @@ print("Data processed.")
 
 
 # tf Graph input
-x = tf.placeholder("int32", [None, None])
-y = tf.placeholder("float", [None, n_classes])
+x = tf.placeholder("int32", [batch_size, None])
+y = tf.placeholder("float", [batch_size, n_classes])
 keep_prob = tf.placeholder(tf.float32)
 
 # Define weights
@@ -65,7 +83,7 @@ biases = {
 def RNN(inp, embedding, weights, biases):
     # Get embeddings for the talk
     x = tf.nn.embedding_lookup(embedding, inp)
-    x = tf.nn.dropout(x, keep_prob)
+    # x = tf.nn.dropout(x, keep_prob)
 
     print("Creating the network")
     # Permuting batch_size and n_steps
@@ -109,6 +127,7 @@ def RNN(inp, embedding, weights, biases):
 
     outputs = tf.concat(outputs, 0)
     z = tf.reduce_mean(outputs, 0)
+    # z_drop = tf.nn.dropout(z, keep_prob)
 
     h = tf.nn.tanh(tf.matmul(z, weights['W']) + biases['b'])
     
@@ -121,8 +140,13 @@ def RNN(inp, embedding, weights, biases):
 pred = RNN(x, E, weights, biases)
 print("Created the network")
 # Define loss and optimizer
+# weight = tf.reduce_sum(reg_weights*y, axis=1)
+# cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y)*weight)
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y))
+# reg = tf.reduce_sum((pred*y)*reg_weights)
+# cost = tf.reduce_mean(-tf.reduce_sum(reg_weights*y * tf.log(pred), reduction_indices=[1]))
 optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+# optimizer = tf.train.AdadeltaOptimizer(learning_rate=1).minimize(cost)
 
 # Evaluate model
 correct_pred = tf.equal(tf.argmax(pred,1), tf.argmax(y,1))
@@ -140,12 +164,14 @@ def get_accuracy(batches):
     return acc/len(batches)
 
 
-
 accs_train = []
 accs_validate = []
 # Launch the graph
 with tf.Session() as sess:
     sess.run(init)
+    # batch = batches_train[0]
+    # print(sess.run(weight, feed_dict={y: batch[1]}))
+    print ("Testing Accuracy:", get_accuracy(batches_test))
     for i in range(epochs):
         # Calculate batch accuracy
         acc_train = get_accuracy(batches_train)
@@ -155,7 +181,8 @@ with tf.Session() as sess:
         accs_train.append(acc_train)
         accs_validate.append(acc_validate)
 
-        for batch_x, batch_y in batches_train:
+        for _ in range(31):
+            batch_x, batch_y = balancer.next_batch(batch_size)
             # Run optimization op (backprop)
             sess.run(optimizer, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
             

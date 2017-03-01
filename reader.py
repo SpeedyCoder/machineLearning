@@ -1,11 +1,12 @@
 import numpy as np
 import os
-import re
 
-import urllib.request
-import zipfile
-import lxml.etree
+import json
+
+import re
 from nltk.corpus import stopwords
+
+from time import time
 
 english = stopwords.words('english')
 
@@ -73,8 +74,10 @@ def _talks_to_vec_seq(word_to_id, talks, MAX_SIZE=None):
 
 def _make_glove_embedding(talks):
     print("Loading GloVe...")
-    index_map = {}
-    index = 0
+    index_map = {
+        "<pad>": 0
+    }
+    index = 2
     mat = [np.zeros(50, dtype=np.float32), np.zeros(50, dtype=np.float32)]
     words = set(flatten(talks))
     with open('glove.6B.50d.txt', encoding='utf-8') as f:
@@ -93,31 +96,71 @@ def _make_glove_embedding(talks):
     return index_map, np.array(mat)
 
 
+def _pad(talk, length):
+    return talk + ["<pad>" for _ in range(length-len(talk))]
+
+
 def get_raw_data(n_train, n_validate, n_test, MAX_SIZE=None):
-    # Download the dataset if it's not already there: this may take a minute as it is 75MB
-    if not os.path.isfile('ted_en-20160408.zip'):
-        print("Downloading the data...")
-        urllib.request.urlretrieve("https://wit3.fbk.eu/get.php?path=XML_releases/xml/ted_en-20160408.zip&filename=ted_en-20160408.zip", filename="ted_en-20160408.zip")
+    if os.path.isfile('talks.json'):
+        print("Loading the data...")
+        start = time()
+        with open('talks.json', 'r') as f:
+            talks = json.load(f)
+        
+        keywords = np.load('keywords.npy')
 
-    print("Processing the data...")
-    # For now, we're only interested in the subtitle text, so let's extract that from the XML:
-    with zipfile.ZipFile('ted_en-20160408.zip', 'r') as z:
-        doc = lxml.etree.parse(z.open('ted_en-20160408.xml', 'r'))
+        end = time()
+        print(end-start, "seconds")
 
-    talks = doc.xpath('//content/text()')
-    keywords = doc.xpath('//head/keywords/text()')
-    del doc
+    else:
+        print("Processing the data...")
+         # Download the dataset if it's not already there: this may take a minute as it is 75MB
+        if not os.path.isfile('ted_en-20160408.zip'):
+            import urllib.request
+            print("Downloading the data...")
+            urllib.request.urlretrieve("https://wit3.fbk.eu/get.php?path=XML_releases/xml/ted_en-20160408.zip&filename=ted_en-20160408.zip", filename="ted_en-20160408.zip")
 
-    # Process keywords
-    keywords = np.array(list(map(_make_label, keywords)))
-    res = []
-    for i, talk in enumerate(talks):
-        res.append(_process_talk(talk))
+        
+        import zipfile
+        import lxml.etree
+        # For now, we're only interested in the subtitle text, so let's extract that from the XML:
+        with zipfile.ZipFile('ted_en-20160408.zip', 'r') as z:
+            doc = lxml.etree.parse(z.open('ted_en-20160408.xml', 'r'))
 
-        if i%100 == 0:
-            print(i, "talks done")
-    talks = res
-    # print(max(map(len, talks))) => 2941
+        talks = doc.xpath('//content/text()')
+        keywords = doc.xpath('//head/keywords/text()')
+        del doc
+
+        # Process keywords
+        keywords = list(map(_make_label, keywords))
+        # ooo 62% of training and 42.4% of validation
+        res = []
+        deleted = 0
+        for i, talk in enumerate(talks):
+            curr = _process_talk(talk)
+            if len(curr) < MAX_SIZE:
+                if len(curr) == 0:
+                    keywords.pop(i)
+                    deleted += 1
+                else:
+                    curr = _pad(curr, MAX_SIZE)
+            else:
+                res.append(curr)
+
+            if i%100 == 0:
+                print(i, "talks done")
+
+        print("Deleted:", deleted)
+        keywords = np.array(keywords)
+        talks = res
+        # print(max(map(len, talks))) => 2941
+
+        # Save talks
+        with open('talks.json', 'w') as f:
+            json.dump(talks, f)
+
+        # Save keywords
+        np.save('keywords', keywords)
 
     index_map, E = _make_glove_embedding(talks[:n_train])
     talks = _talks_to_vec_seq(index_map, talks, MAX_SIZE=MAX_SIZE)
@@ -151,6 +194,9 @@ def make_batches(talks, keywords, batch_size):
         # Make talks equally long
         talks_batch = [talk + [0 for _ in range(n_steps - len(talk))] for talk in talks_batch]
         batches.append((talks_batch, keywords_batch))
+
+    if len(batches[-1][0]) < batch_size:
+        batches.pop(-1)
 
     return batches
 

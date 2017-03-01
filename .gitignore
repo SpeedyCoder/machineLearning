@@ -1,5 +1,10 @@
+# Images
+*.png
+
 # Numpy arrays
 # *.npy
+keywords.npy
+talks.json
 
 # Zip files
 *.zip

@@ -16,4 +16,4 @@ if __name__ == "__main__":
     accs_train = np.load("accs_train.npy")
     accs_validate = np.load("accs_validate.npy")
 
-    make_learning_curve("graph.png", range(0, 100), accs_train, accs_validate, "training", "validation")
+    make_learning_curve("graph.png", range(0, 200), accs_train, accs_validate, "training", "validation")
