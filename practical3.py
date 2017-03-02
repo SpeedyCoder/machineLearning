@@ -107,8 +107,8 @@ def RNN(inp, embedding, weights, biases):
 
     # Define a lstm cell with tensorflow
     # cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=False)
-    cell = rnn.BasicRNNCell(n_hidden)
-    # cell = rnn.GRUCell(n_hidden)
+    # cell = rnn.BasicRNNCell(n_hidden)
+    cell = rnn.GRUCell(n_hidden)
     state = cell.zero_state(batch_size, tf.float32)
     print(tf.shape(state))
 
@@ -122,11 +122,12 @@ def RNN(inp, embedding, weights, biases):
             # result[i], state = tf.nn.dynamic_rnn(cell, x[:,n_steps*i:n_steps*(i+1),:], time_major=True, 
             #                                   dtype=tf.float32, initial_state=state)
             print("here")
-            state = tf.stop_gradient(state)
+            # state = tf.stop_gradient(state)
             outputs.append(result[i])
 
     outputs = tf.concat(outputs, 0)
-    z = tf.reduce_mean(outputs, 0)
+    z = outputs[-1]
+    # z = tf.reduce_mean(outputs, 0)
     # z_drop = tf.nn.dropout(z, keep_prob)
 
     h = tf.nn.tanh(tf.matmul(z, weights['W']) + biases['b'])
