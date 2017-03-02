@@ -38,7 +38,7 @@ n_classes = 8 # total classes
 # Read and process the data
 E, X_dict, y_dict = reader.get_raw_data(1550, 250, 250, MAX_SIZE=MAX_SIZE)
 print(len(X_dict["train"]), len(X_dict["train"][0]))
-
+print(len(y_dict["train"]))
 reg_weights = np.zeros(8, dtype=np.float32)
 for c in range(8):
     reg_weights[c] = (y_dict["train"][:,c] == 1).sum()

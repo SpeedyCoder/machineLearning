@@ -144,6 +144,7 @@ def get_raw_data(n_train, n_validate, n_test, MAX_SIZE=None):
                     deleted += 1
                 else:
                     curr = _pad(curr, MAX_SIZE)
+                    res.append(curr)
             else:
                 res.append(curr)
 
