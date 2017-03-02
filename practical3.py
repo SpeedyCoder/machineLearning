@@ -106,8 +106,8 @@ def RNN(inp, embedding, weights, biases):
     # splits = tf.split(x, math.ceil(MAX_SIZE/n_steps), axis=0)
 
     # Define a lstm cell with tensorflow
-    cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=False)
-    # cell = rnn.BasicRNNCell(n_hidden)
+    # cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=False)
+    cell = rnn.BasicRNNCell(n_hidden)
     # cell = rnn.GRUCell(n_hidden)
     state = cell.zero_state(batch_size, tf.float32)
     print(tf.shape(state))
