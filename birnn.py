@@ -4,6 +4,7 @@ import numpy as np
 import math
 
 import reader
+from balancer import Balancer
 
 from time import time
 
@@ -14,7 +15,7 @@ learning_rate = 0.001
 epochs = 100
 batch_size = 50
 display_step = 1
-MAX_SIZE = 200
+MAX_SIZE = 1000
 
 # Network Parameters
 n_input = 50
@@ -26,6 +27,8 @@ n_classes = 8 # total classes
 
 # Read and process the data
 E, X_dict, y_dict = reader.get_raw_data(1500, 250, 250, MAX_SIZE=MAX_SIZE)
+
+balancer = Balancer(X_dict["train"], y_dict["train"])
 batches_train = reader.make_batches(X_dict["train"], y_dict["train"], batch_size)
 batches_validate = reader.make_batches(X_dict["validate"], y_dict["validate"], batch_size)
 batches_test = reader.make_batches(X_dict["test"], y_dict["test"], batch_size)
@@ -53,7 +56,7 @@ biases = {
 def RNN(inp, embedding, weights, biases):
     # Get embeddings for the talk
     x = tf.nn.embedding_lookup(embedding, inp)
-    x = tf.nn.dropout(x, keep_prob)
+    # x = tf.nn.dropout(x, keep_prob)
 
     print("Creating the network")
     # Permuting batch_size and n_steps
@@ -74,8 +77,8 @@ def RNN(inp, embedding, weights, biases):
     # splits = tf.split(x, math.ceil(MAX_SIZE/n_steps), axis=0)
 
     # Define a lstm cell with tensorflow
-    fw_cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0)
-    bw_cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0)
+    fw_cell = rnn.GRUCell(n_hidden)
+    bw_cell = rnn.GRUCell(n_hidden)
 
     print("Creating the bidirectional rnn")
     outputs, _, _ = rnn.static_bidirectional_rnn(fw_cell, bw_cell, inputs, dtype=tf.float32)
@@ -118,6 +121,9 @@ accs_validate = []
 # Launch the graph
 with tf.Session() as sess:
     sess.run(init)
+    # batch = batches_train[0]
+    # print(sess.run(weight, feed_dict={y: batch[1]}))
+    print ("Testing Accuracy:", get_accuracy(batches_test))
     for i in range(epochs):
         # Calculate batch accuracy
         acc_train = get_accuracy(batches_train)
@@ -127,7 +133,8 @@ with tf.Session() as sess:
         accs_train.append(acc_train)
         accs_validate.append(acc_validate)
 
-        for batch_x, batch_y in batches_train:
+        for _ in range(31):
+            batch_x, batch_y = balancer.next_batch(batch_size)
             # Run optimization op (backprop)
             sess.run(optimizer, feed_dict={x: batch_x, y: batch_y, keep_prob: 0.5})
             
