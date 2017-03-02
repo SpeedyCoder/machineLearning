@@ -77,11 +77,13 @@ def RNN(inp, embedding, weights, biases):
     # splits = tf.split(x, math.ceil(MAX_SIZE/n_steps), axis=0)
 
     # Define a lstm cell with tensorflow
-    fw_cell = rnn.GRUCell(n_hidden)
-    bw_cell = rnn.GRUCell(n_hidden)
+    # fw_cell = rnn.GRUCell(n_hidden)
+    # bw_cell = rnn.GRUCell(n_hidden)
+    cell = rnn.GRUCell(n_hidden)
 
     print("Creating the bidirectional rnn")
-    outputs, _, _ = rnn.static_bidirectional_rnn(fw_cell, bw_cell, inputs, dtype=tf.float32)
+    #  outputs, _, _ = rnn.static_bidirectional_rnn(fw_cell, bw_cell, inputs, dtype=tf.float32)
+    outputs, _, _ = rnn.static_bidirectional_rnn(cell, cell, inputs, dtype=tf.float32)
 
     z = tf.reduce_mean(outputs, 0)
 
