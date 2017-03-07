@@ -9,7 +9,7 @@ learning_rate = 0.001
 max_grad_norm = 5
 
 epochs = 10
-batch_size = 1
+batch_size = 5
 
 MAX_SIZE = 7020
 vocab, E_talks, E_keywords, talks_dict, keywords_dict = reader.get_generation_data(1585, 250, 250)
@@ -110,7 +110,7 @@ def sample(sess):
     while length < 50:
         word_index = sess.run(pred, feed_dict={
             inputs: ins,
-            keywords: batches_train[0]["keywords"],
+            keywords: batches_train[0]["keywords"][:5],
             seq_lengths: [length]
         }) [length - 1]
         
@@ -123,7 +123,7 @@ def sample(sess):
 def calculate_perplexity(step, sess):
     res = 0
     for batch in batches_train:
-        res += sess.run([cost], feed_dict={
+        res += sess.run(cost, feed_dict={
             inputs: batch["inputs"],
             keywords: batch["keywords"],
             targets: batch["targets"],
