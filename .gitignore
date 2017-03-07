@@ -5,6 +5,8 @@
 # *.npy
 keywords.npy
 talks.json
+talks_gen.json
+keywords_gen.json
 
 # Zip files
 *.zip

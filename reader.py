@@ -34,6 +34,10 @@ def _make_label(keywords):
     return x
 
 
+def _process_keywords(keywords):
+    return keywords.replace(' ', '').lower().split(',')
+
+
 def _process_talk(talk):
     # Remove text in parenthesis
     talk_noparens = re.sub(r'\([^)]*\)', '', talk)
@@ -58,27 +62,61 @@ def _process_talk(talk):
     return (talk_tokens)
 
 
-def _talks_to_vec_seq(word_to_id, talks, MAX_SIZE=None):
-    print("Converting talks to vectors...")
-    def to_id(word):
-        if word in word_to_id:
-            return word_to_id[word]
-        else:
-            return 1
+def _process_talk_gen(talk):
+    # Remove text in parenthesis
+    talk_noparens = re.sub(r'\([^)]*\)', '', talk)
 
-    if MAX_SIZE is None:
-        return [[to_id(word) for word in talk] for talk in talks]
+    # Remove the names of the speakers
+    sentences_strings = []
+    for line in talk_noparens.split('\n'):
+        m = re.match(r'^(?:(?P<precolon>[^:]{,20}):)?(?P<postcolon>.*)$', line)
+        sentences_strings.extend(sent for sent in m.groupdict()['postcolon'].split('.') if sent)
+
+    talk_tokens = ["<START>"]
+    for sent_str in sentences_strings:
+        tokens = re.sub(r"[^a-z0-9]+", " ", sent_str.lower()).split()
+        tokens.append("<EOS>")
+        talk_tokens.extend(tokens)
+
+    talk_tokens.append("<END>")
+
+    return talk_tokens
+
+
+def _to_id_talk(word_to_id, word):
+    if word in word_to_id:
+        return word_to_id[word]
     else:
-        return[[to_id(word) for i, word in enumerate(talk) if i < MAX_SIZE] for talk in talks]
+        return 1
+
+
+def _to_id_keywords(word_to_id, word):
+    if word in word_to_id:
+        return word_to_id[word]
+    else:
+        return 0
+
+
+def _to_vec_seq(to_id, word_to_id, talks, MAX_SIZE=None):
+    print("Converting talks to vectors...")
+    if MAX_SIZE is None:
+        return [[to_id(word_to_id, word) for word in talk] for talk in talks]
+    else:
+        return[[to_id(word_to_id, word) for i, word in enumerate(talk) if i < MAX_SIZE] for talk in talks]
 
 
 def _make_glove_embedding(talks):
     print("Loading GloVe...")
+    vocab = ["<pad>", "<unk>", "<START>", "<EOS>", "<END>"]
     index_map = {
-        "<pad>": 0
+        "<pad>": 0,
+        "<unk>": 1,
+        "<START>": 2,
+        "<EOS>": 3,
+        "<END>": 4
     }
-    index = 2
-    mat = [np.zeros(50, dtype=np.float32), np.zeros(50, dtype=np.float32)]
+    index = 5
+    mat = [np.zeros(50, dtype=np.float32) for _ in range(5)]
     words = set(flatten(talks))
     with open('glove.6B.50d.txt', encoding='utf-8') as f:
         for line in f:
@@ -87,17 +125,102 @@ def _make_glove_embedding(talks):
             if word in words:
                 vec = np.array([float(r) for r in vec], dtype=np.float32)
                 index_map[word] = index
+                vocab.append(word)
                 index += 1
                 mat.append(vec)
 
     # Unknown words
     mat.append(np.zeros(50, dtype=np.float32))
 
-    return index_map, np.array(mat)
+    return index_map, vocab, np.array(mat)
+
+
+def _make_random_embedding(talks, embedding_size=20):
+    index_map = {}
+    index = 1
+    # 0 is for unknown word 
+    mat = [np.zeros(embedding_size, dtype=np.float32)]
+    for talk in talks:
+        for word in talk:
+            if word not in index_map:
+                vec = 2 * np.random.randn(embedding_size)
+                mat.append(vec)
+                index_map[word] = index
+                index += 1
+
+    return index_map, np.array(mat, dtype=np.float32)
 
 
 def _pad(talk, length):
     return talk + ["<pad>" for _ in range(length-len(talk))]
+
+
+def get_generation_data(n_train, n_validate, n_test, MAX_SIZE=None):
+    start = time()
+    if os.path.isfile('talks_gen.json'):
+        print("Loading the data...")
+        
+        with open('talks_gen.json', 'r') as f:
+            talks = json.load(f)
+
+        with open('keywords_gen.json', 'r') as f:
+            keywords = json.load(f)
+
+    else:
+        print("Processing the data...")
+         # Download the dataset if it's not already there: this may take a minute as it is 75MB
+        if not os.path.isfile('ted_en-20160408.zip'):
+            import urllib.request
+            print("Downloading the data...")
+            urllib.request.urlretrieve("https://wit3.fbk.eu/get.php?path=XML_releases/xml/ted_en-20160408.zip&filename=ted_en-20160408.zip", filename="ted_en-20160408.zip")
+
+        
+        import zipfile
+        import lxml.etree
+        # For now, we're only interested in the subtitle text, so let's extract that from the XML:
+        with zipfile.ZipFile('ted_en-20160408.zip', 'r') as z:
+            doc = lxml.etree.parse(z.open('ted_en-20160408.xml', 'r'))
+
+        talks = doc.xpath('//content/text()')
+        keywords = doc.xpath('//head/keywords/text()')
+        del doc
+
+        keywords = list(map(_process_keywords, keywords))
+        talks = list(map(_process_talk_gen, talks))
+
+        print(max(map(len, talks))) # => 7020
+
+        # Save talks
+        with open('talks_gen.json', 'w') as f:
+            json.dump(talks, f)
+
+        # Save keywords
+        with open('keywords_gen.json', 'w') as f:
+            json.dump(keywords, f)
+
+    index_map, E_keywords = _make_random_embedding(keywords[:n_train])
+    keywords = _to_vec_seq(_to_id_keywords, index_map, keywords)
+
+    index_map, vocab, E_talks = _make_glove_embedding(talks[:n_train])
+    talks = _to_vec_seq(_to_id_talk, index_map, talks, MAX_SIZE=MAX_SIZE)
+
+    talks_dict = {
+        "train": talks[:n_train],
+        "validate": talks[n_train: n_train+n_validate],
+        "test": talks[n_train+n_validate: n_train+n_validate+n_test]
+    }
+
+    keywords_dict = {
+        "train": keywords[:n_train],
+        "validate": keywords[n_train: n_train+n_validate],
+        "test": keywords[n_train+n_validate: n_train+n_validate+n_test]
+    }
+
+    end = time()
+    print(end-start, "seconds")
+    
+    return vocab, E_talks, E_keywords, talks_dict, keywords_dict
+
 
 
 def get_raw_data(n_train, n_validate, n_test, MAX_SIZE=None):
@@ -163,8 +286,8 @@ def get_raw_data(n_train, n_validate, n_test, MAX_SIZE=None):
         # Save keywords
         np.save('keywords', keywords)
 
-    index_map, E = _make_glove_embedding(talks[:n_train])
-    talks = _talks_to_vec_seq(index_map, talks, MAX_SIZE=MAX_SIZE)
+    index_map, vocab, E = _make_glove_embedding(talks[:n_train])
+    talks = _to_vec_seq(_to_id_talk, index_map, talks, MAX_SIZE=MAX_SIZE)
 
     talks_dict = {
         "train": talks[:n_train],
@@ -188,41 +311,52 @@ def _to_chunks(l1, l2, n):
         yield l1[i:i + n], l2[i: i + n]
 
 
-def make_batches(talks, keywords, batch_size):
+def make_batches(talks, keywords, batch_size, equal_len=True, equal_size=True):
     batches = []
     for talks_batch, keywords_batch in _to_chunks(talks, keywords, batch_size):
         n_steps = max(map(len, talks_batch))
         # Make talks equally long
-        talks_batch = [talk + [0 for _ in range(n_steps - len(talk))] for talk in talks_batch]
+        if equal_len:
+            talks_batch = [talk + [0 for _ in range(n_steps - len(talk))] for talk in talks_batch]
         batches.append((talks_batch, keywords_batch))
 
-    if len(batches[-1][0]) < batch_size:
-        batches.pop(-1)
+    if equal_size:
+        if len(batches[-1][0]) < batch_size:
+            batches.pop(-1)
+
+    return batches
+
+def make_batches_gen(talks, keywords, batch_size):
+    batches = []
+    for talks_batch, keywords_batch in _to_chunks(talks, keywords, batch_size):
+        batch = {
+            "inputs": [],
+            "targets": [],
+            "keywords": keywords_batch,
+            # "mask": [],
+            "seq_lengths": list(map(lambda x: len(x)-1, talks_batch)),
+            "max_len": 0
+        }
+        batch["max_len"] = max(batch["seq_lengths"])
+
+        for talk in talks_batch:
+            padding = [0 for _ in range(batch["max_len"]-len(talk)+1)]
+            # batch["mask"].append(
+            #     [1 for _ in range(len(talk)-1)] + padding )
+            batch["inputs"].append(
+                talk[:len(talk)-1] + padding)
+            batch["targets"].append(
+                talk[1:]+ padding)
+
+        # batch["mask"] = np.array(batch["mask"], dtype=np.float32)
+        batch["loss_weights"] = [np.ones(len(talks_batch)*batch["max_len"], dtype=np.float32)]
+        batches.append(batch)
 
     return batches
 
 def make_array(talks, keywords):
     batch = make_batches(talks, keywords, len(talks))
     return batch[0]
-
-# import numpy as np
-
-# print("Loading data...")
-# X = np.load("talks.npy")
-# print("Shape of X:", X.shape)
-# Y = np.load("keywords.npy")
-# print("Shape of y:", Y.shape)
-# E = np.load("embedding.npy")
-# print("Shape of E:", Y.shape)
-
-# Y_train = Y[:1585]
-# X_train = X[:1585]
-
-# Y_validation = Y[1585:1835]
-# X_validation = X[1585:1835]
-
-# Y_test = Y[1835:]
-# X_test = X[1835:]
 
 
 

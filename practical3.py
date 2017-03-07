@@ -122,7 +122,7 @@ def RNN(inp, embedding, weights, biases):
             # result[i], state = tf.nn.dynamic_rnn(cell, x[:,n_steps*i:n_steps*(i+1),:], time_major=True, 
             #                                   dtype=tf.float32, initial_state=state)
             print("here")
-            # state = tf.stop_gradient(state)
+            state = tf.stop_gradient(state)
             outputs.append(result[i])
 
     outputs = tf.concat(outputs, 0)
