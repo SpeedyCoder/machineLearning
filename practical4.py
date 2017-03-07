@@ -164,6 +164,9 @@ for step in range(epochs):
         print("Batch %s done, cost: %.3f, time: %.3fs" %
                 (i, costs, time() - start))
 
+        if i % 50 == 0:
+            sample(sess)
+
     print("Time taken: %.3f" % (time() - start))
     calculate_perplexity(step, sess)
     sample(sess)
