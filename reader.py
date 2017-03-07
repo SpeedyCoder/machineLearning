@@ -83,26 +83,17 @@ def _process_talk_gen(talk):
     return talk_tokens
 
 
-def _to_id_talk(word_to_id, word):
-    if word in word_to_id:
-        return word_to_id[word]
-    else:
-        return 1
-
-
-def _to_id_keywords(word_to_id, word):
-    if word in word_to_id:
-        return word_to_id[word]
-    else:
-        return 0
-
-
-def _to_vec_seq(to_id, word_to_id, talks, MAX_SIZE=None):
+def _to_vec_seq(word_to_id, talks, MAX_SIZE=None):
+    def to_id(word):
+        if word in word_to_id:
+            return word_to_id[word]
+        else:
+            return 1
     print("Converting talks to vectors...")
     if MAX_SIZE is None:
-        return [[to_id(word_to_id, word) for word in talk] for talk in talks]
+        return [[to_id(word) for word in talk] for talk in talks]
     else:
-        return[[to_id(word_to_id, word) for i, word in enumerate(talk) if i < MAX_SIZE] for talk in talks]
+        return[[to_id(word) for i, word in enumerate(talk) if i < MAX_SIZE] for talk in talks]
 
 
 def _make_glove_embedding(talks):
@@ -137,8 +128,8 @@ def _make_glove_embedding(talks):
 
 def _make_random_embedding(talks, embedding_size=20):
     index_map = {}
-    index = 1
-    # 0 is for unknown word 
+    index = 2
+    # 0 is for padding and 1 unknown word 
     mat = [np.zeros(embedding_size, dtype=np.float32)]
     for talk in talks:
         for word in talk:
@@ -199,10 +190,10 @@ def get_generation_data(n_train, n_validate, n_test, MAX_SIZE=None):
             json.dump(keywords, f)
 
     index_map, E_keywords = _make_random_embedding(keywords[:n_train])
-    keywords = _to_vec_seq(_to_id_keywords, index_map, keywords)
+    keywords = _to_vec_seq(index_map, keywords)
 
     index_map, vocab, E_talks = _make_glove_embedding(talks[:n_train])
-    talks = _to_vec_seq(_to_id_talk, index_map, talks, MAX_SIZE=MAX_SIZE)
+    talks = _to_vec_seq(index_map, talks, MAX_SIZE=MAX_SIZE)
 
     talks_dict = {
         "train": talks[:n_train],
@@ -287,7 +278,7 @@ def get_raw_data(n_train, n_validate, n_test, MAX_SIZE=None):
         np.save('keywords', keywords)
 
     index_map, vocab, E = _make_glove_embedding(talks[:n_train])
-    talks = _to_vec_seq(_to_id_talk, index_map, talks, MAX_SIZE=MAX_SIZE)
+    talks = _to_vec_seq(index_map, talks, MAX_SIZE=MAX_SIZE)
 
     talks_dict = {
         "train": talks[:n_train],
@@ -329,6 +320,9 @@ def make_batches(talks, keywords, batch_size, equal_len=True, equal_size=True):
 def make_batches_gen(talks, keywords, batch_size):
     batches = []
     for talks_batch, keywords_batch in _to_chunks(talks, keywords, batch_size):
+        n_keywords = max(map(len, keywords_batch))
+        keywords_batch = [keys + [0 for _ in range(n_keywords-len(keys))] 
+                          for keys in keywords_batch]
         batch = {
             "inputs": [],
             "targets": [],

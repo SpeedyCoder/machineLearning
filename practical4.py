@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-from pprint import pprint
+from time import time
 import reader
 
 # Define constants and load data
@@ -9,7 +9,7 @@ learning_rate = 0.001
 max_grad_norm = 5
 
 epochs = 10
-batch_size = 5
+batch_size = 1
 
 MAX_SIZE = 7020
 vocab, E_talks, E_keywords, talks_dict, keywords_dict = reader.get_generation_data(1585, 250, 250)
@@ -138,9 +138,11 @@ def calculate_perplexity(step, sess):
 sess = tf.Session()
 sess.run(init)
 
+start = time()
+
 for step in range(epochs):
     # Calculate batch accuracy
-    for batch in batches_train:
+    for i, batch in enumerate(batches_train):
         # Run optimization op (backprop)
         # pprint(batch)
         # TODO: check if using seq lengths works or need to use a mask
@@ -152,15 +154,21 @@ for step in range(epochs):
 
         # print(outs[-1])
 
-        sess.run([train_op], feed_dict={
+        costs, _ = sess.run([cost, train_op], feed_dict={
             inputs: batch["inputs"],
             keywords: batch["keywords"],
             targets: batch["targets"],
             seq_lengths: batch["seq_lengths"],
             loss_weights: batch["loss_weights"]})
 
+        print("Batch %s done, cost: %.3f, time: %.3fs" %
+                (i, costs, time() - start))
+
+    print("Time taken: %.3f" % (time() - start))
     calculate_perplexity(step, sess)
     sample(sess)
+
+print("Finished in: %.3f"% (time() - start))
 
 
 
