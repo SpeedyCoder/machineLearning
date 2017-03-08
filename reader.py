@@ -4,11 +4,30 @@ import os
 import json
 
 import re
+from collections import Counter
 from nltk.corpus import stopwords
 
 from time import time
 
 english = stopwords.words('english')
+
+
+class Data(object):
+    def __init__(self):
+        self.vocab = []
+        self.keys_vocab = []
+        self.index_map = {}
+        self.keys_index_map = {}
+        self.E_talks = []
+        self.E_keywords = []
+
+        self.talks_train = []
+        self.talks_validate = []
+        self.talks_test = []
+
+        self.keywords_train = []
+        self.keywords_validate = []
+        self.keywords_test = []
 
 
 def flatten(l):
@@ -96,7 +115,7 @@ def _to_vec_seq(word_to_id, talks, MAX_SIZE=None):
         return[[to_id(word) for i, word in enumerate(talk) if i < MAX_SIZE] for talk in talks]
 
 
-def _make_glove_embedding(talks):
+def _make_glove_embedding(words, keywords):
     print("Loading GloVe...")
     vocab = ["<pad>", "<unk>", "<START>", "<EOS>", "<END>"]
     index_map = {
@@ -108,22 +127,71 @@ def _make_glove_embedding(talks):
     }
     index = 5
     mat = [np.zeros(50, dtype=np.float32) for _ in range(5)]
-    words = set(flatten(talks))
     with open('glove.6B.50d.txt', encoding='utf-8') as f:
         for line in f:
             vec = line.split()
             word = vec.pop(0)
-            if word in words:
+            if word in words or word in keywords:
                 vec = np.array([float(r) for r in vec], dtype=np.float32)
                 index_map[word] = index
                 vocab.append(word)
                 index += 1
                 mat.append(vec)
 
-    # Unknown words
-    mat.append(np.zeros(50, dtype=np.float32))
+    for word in keywords:
+        if word not in vocab:
+            vec = 2 * np.random.randn(50)
+            index_map[word] = index
+            vocab.append(word)
+            index += 1
+            mat.append(vec)
 
-    return index_map, vocab, np.array(mat)
+    return index_map, vocab, np.array(mat, dtype=np.float32)
+
+
+def _make_random_embeddings(words, keywords, embedding_size=200):
+    print("Making Random Embeddings...")
+    data = Data()
+    data.vocab = ["<pad>", "<unk>", "<START>", "<EOS>", "<END>"]
+    data.keys_vocab = ["<pad>", "<unk>"]
+    data.index_map = {
+        "<pad>": 0,
+        "<unk>": 1,
+        "<START>": 2,
+        "<EOS>": 3,
+        "<END>": 4
+    }
+    data.keys_index_map = {
+        "<pad>": 0,
+        "<unk>": 1
+    }
+    index = 5
+    data.E_talks =( [np.zeros(embedding_size, dtype=np.float32) for _ in range(2)] +
+            [2 * np.random.randn(embedding_size) for _ in range(3)])
+    
+    for word in words:
+        if word not in data.vocab:
+            vec = 2 * np.random.randn(embedding_size)
+            data.index_map[word] = index
+            data.vocab.append(word)
+            index += 1
+            data.E_talks.append(vec)
+
+    data.E_keywords = [np.zeros(embedding_size, dtype=np.float32) for _ in range(2)]
+    index = 2
+    for word in keywords:
+        if word in data.index_map:
+            vec = data.E_talks[data.index_map[word]]
+            data.E_keywords.append(vec)
+            data.keys_vocab.append(word)
+            data.keys_index_map[word] = index
+            index += 1
+
+    data.E_talks = np.array(data.E_talks, dtype=np.float32)
+    data.E_keywords = np.array(data.E_keywords, dtype=np.float32)
+
+    return data
+
 
 
 def _make_random_embedding(talks, embedding_size=20):
@@ -146,7 +214,7 @@ def _pad(talk, length):
     return talk + ["<pad>" for _ in range(length-len(talk))]
 
 
-def get_generation_data(n_train, n_validate, n_test, MAX_SIZE=None):
+def get_generation_data(n_train, n_validate, n_test, MAX_SIZE=None, voc_size=40000):
     start = time()
     if os.path.isfile('talks_gen.json'):
         print("Loading the data...")
@@ -178,6 +246,15 @@ def get_generation_data(n_train, n_validate, n_test, MAX_SIZE=None):
 
         keywords = list(map(_process_keywords, keywords))
         talks = list(map(_process_talk_gen, talks))
+        print(list(map(len, talks[:20])))
+
+        res = sorted(zip(talks, keywords), key=lambda x: len(x[0]))
+        res = [(talk, keys) for talk, keys in res if len(talk) > 100]
+        print("Talks:", len(res))
+        keywords = [keys for _, keys in res]
+        talks = [talk for talk, _ in res]
+        del res
+        print(list(map(len, talks[:20])))
 
         print(max(map(len, talks))) # => 7020
 
@@ -189,28 +266,29 @@ def get_generation_data(n_train, n_validate, n_test, MAX_SIZE=None):
         with open('keywords_gen.json', 'w') as f:
             json.dump(keywords, f)
 
-    index_map, E_keywords = _make_random_embedding(keywords[:n_train])
-    keywords = _to_vec_seq(index_map, keywords)
+    all_words = flatten(talks[:n_train])
+    counter = Counter(all_words)
+    words = [word for word, _ in counter.most_common(voc_size)]
+    print(len(words))
+    keys = set(flatten(keywords[:n_train]))
 
-    index_map, vocab, E_talks = _make_glove_embedding(talks[:n_train])
-    talks = _to_vec_seq(index_map, talks, MAX_SIZE=MAX_SIZE)
+    data = _make_random_embeddings(words, keys)
 
-    talks_dict = {
-        "train": talks[:n_train],
-        "validate": talks[n_train: n_train+n_validate],
-        "test": talks[n_train+n_validate: n_train+n_validate+n_test]
-    }
+    keywords = _to_vec_seq(data.keys_index_map, keywords)
+    talks = _to_vec_seq(data.index_map, talks, MAX_SIZE=MAX_SIZE)
 
-    keywords_dict = {
-        "train": keywords[:n_train],
-        "validate": keywords[n_train: n_train+n_validate],
-        "test": keywords[n_train+n_validate: n_train+n_validate+n_test]
-    }
+    data.talks_train = talks[:n_train]
+    data.talks_validate = talks[n_train: n_train+n_validate]
+    data.talks_test = talks[n_train+n_validate: n_train+n_validate+n_test]
+    
+    data.keywords_train = keywords[:n_train]
+    data.keywords_validate = keywords[n_train: n_train+n_validate]
+    data.keywords_test = keywords[n_train+n_validate: n_train+n_validate+n_test]
 
     end = time()
     print(end-start, "seconds")
     
-    return vocab, E_talks, E_keywords, talks_dict, keywords_dict
+    return data
 
 
 
