@@ -17,7 +17,7 @@ class Config(object):
         self.max_grad_norm = 10
 
         self.epochs = 10
-        self.batch_size = 5
+        self.batch_size = 1
         
         self.vocab_size = len(data.vocab)
         print("Size of vocabulary:", self.vocab_size)
@@ -26,7 +26,7 @@ class Config(object):
 
         self.rnn_size = 200
 
-        self.step_sample = 10
+        self.step_sample = 20
         
 
 class Model(object):
@@ -37,6 +37,7 @@ class Model(object):
         tf.reset_default_graph()
         print("Building the RNN...")
 
+        self.saver = tf.train.Saver()
         # tf Graph input
         self.inputs = tf.placeholder("int32", [None, None])
         self.targets = tf.placeholder("int32", [None, None])
@@ -44,6 +45,7 @@ class Model(object):
 
         self.seq_lengths = tf.placeholder("int32", [None])
         self.loss_weights = tf.placeholder("float", [None, None])
+        # self.mask = tf.placeholder("float", [None, None])
 
         # Learning rate
         self.lr = tf.Variable(0.0, trainable=False)
@@ -164,7 +166,7 @@ class Model(object):
 
     def calculate_perplexity(self, step, sess):
         res = 0
-        for batch in self.data.batches_train:
+        for batch in self.data.batches_validate:
             res += sess.run(self.cost, feed_dict={
                 self.inputs: batch["inputs"],
                 self.keywords: batch["keywords"],
@@ -173,20 +175,26 @@ class Model(object):
                 self.loss_weights: batch["loss_weights"]})
 
         res = res/len(self.data.batches_train)
-        print("%s cost: %.3f, perplexity: %.3f" %
-                    (step, res, np.exp(res)))
+
+        return res
 
     def train(self):
         print("Training...")
         learning_rate = self.config.learning_rate
+        step_size = self.config.step_sample
         start = time()
 
         sess = tf.Session()
         sess.run(self.init)
         sess.run(self.lr_update, feed_dict={self.new_lr: learning_rate})
+        start = time()
 
         for step in range(self.config.epochs):
+
             # Calculate batch accuracy
+            start_epoch = time()
+            start_batch = start_epoch
+            costs = 0
             for i, batch in enumerate(self.data.batches_train):
                 # Run optimization op (backprop)
                 # pprint(batch)
@@ -198,31 +206,40 @@ class Model(object):
                 #     loss_weights: batch["loss_weights"]})
 
                 # print(outs[-1])
-                logs, costs, _ = sess.run([self.logits, self.cost, self.train_op], feed_dict={
+                cost, _ = sess.run([self.cost, self.train_op], feed_dict={
                     self.inputs: batch["inputs"],
                     self.keywords: batch["keywords"],
                     self.targets: batch["targets"],
                     self.seq_lengths: batch["seq_lengths"],
                     self.loss_weights: batch["loss_weights"]})
 
-                print(len(batch["inputs"][0]))
-                print(logs.shape)
+                costs += cost
 
-                print("Batch %s done, cost: %.3f, time: %.2fs" %
-                        (i, costs, time() - start))
 
-                if i % self.step_sample == 0:
-                    self.sample(sess)
+                if (i+1) % step_size == 0 and i != 0:
+                    t = time() - start_batch
+                    print("%s talks done, avg cost: %.2f, time: %.2fs, avg time for talk: %.3f" %
+                            (i+1, costs/step_size, t, t/step_size))
 
-            print("Time taken: %.3f" % (time() - start))
-            # self.calculate_perplexity(step, sess)
+                    start_batch = time()
+                    costs = 0
+                    break
+                    # self.sample(sess)
+            end_epoch = time()
+            print("-"*70)
+            cost = self.calculate_perplexity(step, sess)
+            print("Epoch %s complete, validation cost: %.2f, time: %.2fs, avg time for talk: %.3f\n" % 
+                    (step, cost, time() - start_epoch), (end_epoch - start_epoch)/len(self.data.batches_train))
+
             self.sample(sess, limit=1000)
+            print()
 
             # Decrease learning rate
             learning_rate = learning_rate * self.config.lr_decay
             sess.run(self.lr_update, feed_dict={self.new_lr: learning_rate})
 
         print("Finished in: %.3f"% (time() - start))
+        self.saver.save(sess, "model.ckpt")
         sess.close()
 
 

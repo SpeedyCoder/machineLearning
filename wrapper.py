@@ -23,6 +23,16 @@ class Batches(object):
 			self.data.keywords_train, 
 			self.config.batch_size
 		)
+		self.data.batches_validate = reader.make_batches_gen(
+			self.data.talks_validate, 
+			self.data.keywords_validate, 
+			self.config.batch_size
+		)
+		self.data.batches_test = reader.make_batches_gen(
+			self.data.talks_test, 
+			self.data.keywords_test, 
+			self.config.batch_size
+		)
 
 	def get_train_batches(self):
 		return self.data.batches_train

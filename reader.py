@@ -405,7 +405,7 @@ def make_batches_gen(talks, keywords, batch_size):
             "inputs": [],
             "targets": [],
             "keywords": keywords_batch,
-            # "mask": [],
+            "mask": [],
             "seq_lengths": list(map(lambda x: len(x)-1, talks_batch)),
             "max_len": 0
         }
@@ -413,14 +413,14 @@ def make_batches_gen(talks, keywords, batch_size):
 
         for talk in talks_batch:
             padding = [0 for _ in range(batch["max_len"]-len(talk)+1)]
-            # batch["mask"].append(
-            #     [1 for _ in range(len(talk)-1)] + padding )
+            batch["mask"].append(
+                [1 for _ in range(len(talk)-1)] + padding )
             batch["inputs"].append(
                 talk[:len(talk)-1] + padding)
             batch["targets"].append(
                 talk[1:]+ padding)
 
-        # batch["mask"] = np.array(batch["mask"], dtype=np.float32)
+        batch["mask"] = np.array(batch["mask"], dtype=np.float32)
         batch["loss_weights"] = [np.ones(len(talks_batch)*batch["max_len"], dtype=np.float32)]
         batches.append(batch)
 
