@@ -37,7 +37,6 @@ class Model(object):
         tf.reset_default_graph()
         print("Building the RNN...")
 
-        self.saver = tf.train.Saver()
         # tf Graph input
         self.inputs = tf.placeholder("int32", [None, None])
         self.targets = tf.placeholder("int32", [None, None])
@@ -162,7 +161,7 @@ class Model(object):
             ins[0].append(word_index)
             length += 1
 
-        print(' '.join(res))
+        return (' '.join(res))
 
     def calculate_perplexity(self, step, sess):
         res = 0
@@ -179,6 +178,7 @@ class Model(object):
         return res
 
     def train(self):
+        self.saver = tf.train.Saver()
         print("Training...")
         learning_rate = self.config.learning_rate
         step_size = self.config.step_sample
@@ -223,16 +223,18 @@ class Model(object):
 
                     start_batch = time()
                     costs = 0
-                    break
                     # self.sample(sess)
+                    
             end_epoch = time()
             print("-"*70)
-            cost = self.calculate_perplexity(step, sess)
+            # cost = self.calculate_perplexity(step, sess)
             print("Epoch %s complete, validation cost: %.2f, time: %.2fs, avg time for talk: %.3f\n" % 
-                    (step, cost, time() - start_epoch), (end_epoch - start_epoch)/len(self.data.batches_train))
+                    (step+1, cost, time() - start_epoch, (end_epoch - start_epoch)/len(self.data.batches_train)))
 
-            self.sample(sess, limit=1000)
-            print()
+            talk = self.sample(sess, limit=1000)
+            print(talk, "\n")
+            with open('talk'+str(step)+'.txt', 'w') as f:
+                f.write(talk)
 
             # Decrease learning rate
             learning_rate = learning_rate * self.config.lr_decay
