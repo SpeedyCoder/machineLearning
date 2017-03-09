@@ -41,6 +41,7 @@ class Model(object):
         self.inputs = tf.placeholder("int32", [None, None])
         self.targets = tf.placeholder("int32", [None, None])
         self.keywords = tf.placeholder("int32", [None, None])
+        self.keep_prob = tf.placeholder(tf.float32)
 
         self.seq_lengths = tf.placeholder("int32", [None])
         self.loss_weights = tf.placeholder("float", [None, None])
@@ -80,14 +81,16 @@ class Model(object):
         s = tf.sigmoid(tf.matmul(x, w))
         x2 = s*x2
 
-        self.x = tf.concat([x, x2], 2)
-        
+        x = tf.concat([x, x2], 2)
+        self.x = tf.nn.dropout(x, self.keep_prob)
+
         self.cell = tf.contrib.rnn.GRUCell(config.rnn_size)
 
         self.outputs, self.state = tf.nn.dynamic_rnn(self.cell, self.x, time_major=True, 
             dtype=tf.float32, sequence_length=self.seq_lengths, scope="rnn")
 
         output = tf.reshape(self.outputs, [-1, config.rnn_size])
+        output = tf.nn.dropout(output, self.keep_prob)
 
         self.logits = tf.matmul(output, self.weights['W']) + self.biases['b']
 
@@ -133,13 +136,17 @@ class Model(object):
         state, prob = sess.run([self.state ,self.probs], feed_dict={
             self.inputs: ins,
             self.keywords: keys,
-            self.seq_lengths: [length]
+            self.seq_lengths: [length],
+            self.keep_prob: 1.0
         })
 
         prob = prob/prob.sum()
 
         dist = stats.rv_discrete(name='custm', values=(indexes, prob))
-        word_index = dist.rvs()
+        for i in range(5):
+            word_index = dist.rvs()
+            if word_index != 4:
+                break
         res.append(self.data.vocab[word_index])
         ins[0].append(word_index)
         length += 1
@@ -150,7 +157,8 @@ class Model(object):
                 feed_dict={
                     self.inputs: ins,
                     self.keywords: keys,
-                    self.state_in: state
+                    self.state_in: state,
+                    self.keep_prob: 1.0
                 })
 
             prob = prob/prob.sum()
@@ -171,7 +179,8 @@ class Model(object):
                 self.keywords: batch["keywords"],
                 self.targets: batch["targets"],
                 self.seq_lengths: batch["seq_lengths"],
-                self.loss_weights: batch["loss_weights"]})
+                self.loss_weights: batch["loss_weights"],
+                self.keep_prob: 1.0})
 
         res = res/len(self.data.batches_train)
 
@@ -211,24 +220,25 @@ class Model(object):
                     self.keywords: batch["keywords"],
                     self.targets: batch["targets"],
                     self.seq_lengths: batch["seq_lengths"],
-                    self.loss_weights: batch["loss_weights"]})
+                    self.loss_weights: batch["loss_weights"],
+                    self.keep_prob: 0.5})
 
                 costs += cost
 
 
                 if (i+1) % step_size == 0 and i != 0:
                     t = time() - start_batch
-                    print("%s talks done, avg cost: %.2f, time: %.2fs, avg time for talk: %.3f" %
+                    print("%s talks done, avg cost: %.2f, time: %.2fs, avg time for talk: %.3fs" %
                             (i+1, costs/step_size, t, t/step_size))
 
                     start_batch = time()
                     costs = 0
-                    # self.sample(sess)
-                    
+                    # print(self.sample(sess, limit=300))
+
             end_epoch = time()
             print("-"*70)
             # cost = self.calculate_perplexity(step, sess)
-            print("Epoch %s complete, validation cost: %.2f, time: %.2fs, avg time for talk: %.3f\n" % 
+            print("Epoch %s complete, validation cost: %.2f, time: %.2fs, avg time for talk: %.3fs\n" % 
                     (step+1, cost, time() - start_epoch, (end_epoch - start_epoch)/len(self.data.batches_train)))
 
             talk = self.sample(sess, limit=1000)

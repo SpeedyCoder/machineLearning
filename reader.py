@@ -182,10 +182,14 @@ def _make_random_embeddings(words, keywords, embedding_size=200):
     for word in keywords:
         if word in data.index_map:
             vec = data.E_talks[data.index_map[word]]
-            data.E_keywords.append(vec)
-            data.keys_vocab.append(word)
-            data.keys_index_map[word] = index
-            index += 1
+        else:
+            vec = 2 * np.random.randn(embedding_size)
+
+        data.E_keywords.append(vec)
+        data.keys_vocab.append(word)
+        data.keys_index_map[word] = index
+        index += 1
+
 
     data.E_talks = np.array(data.E_talks, dtype=np.float32)
     data.E_keywords = np.array(data.E_keywords, dtype=np.float32)
@@ -214,7 +218,7 @@ def _pad(talk, length):
     return talk + ["<pad>" for _ in range(length-len(talk))]
 
 
-def get_generation_data(n_train, n_validate, n_test, MAX_SIZE=None, voc_size=40000):
+def get_generation_data(n_train, n_validate, n_test, MAX_SIZE=None, voc_size=40000, keys_voc_size=330):
     start = time()
     if os.path.isfile('talks_gen.json'):
         print("Loading the data...")
@@ -269,8 +273,13 @@ def get_generation_data(n_train, n_validate, n_test, MAX_SIZE=None, voc_size=400
     all_words = flatten(talks[:n_train])
     counter = Counter(all_words)
     words = [word for word, _ in counter.most_common(voc_size)]
+    del all_words, counter
     print(len(words))
-    keys = set(flatten(keywords[:n_train]))
+    all_keys = flatten(keywords[:n_train])
+    counter = Counter(all_keys)
+    keys = [key for key, _ in counter.most_common(keys_voc_size)]
+    del all_keys, counter
+    print(len(keys))
 
     data = _make_random_embeddings(words, keys)
 
