@@ -153,7 +153,7 @@ class Model(object):
 
         # while word_index != 4:
         while length < limit and word_index != 4:
-            stae, prob = sess.run([self.single_state, self.single_probs], 
+            state, prob = sess.run([self.single_state, self.single_probs], 
                 feed_dict={
                     self.inputs: ins,
                     self.keywords: keys,
