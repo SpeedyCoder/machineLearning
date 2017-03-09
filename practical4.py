@@ -74,6 +74,8 @@ class Model(object):
         x2 = tf.reshape(x2, [-1, 1, config.keys_size])
         x2 = tf.tile(x2, [1,tf.shape(x)[0] ,1])
         x2 = tf.transpose(x2, [1, 0, 2])
+        # x2 = tf.reshape(x2, [1, -1, config.keys_size])
+        # x2 = tf.tile(x2, [tf.shape(x)[0], 1, 1])
 
         w = tf.tile(self.weights['gate'], [tf.shape(x)[0], 1, 1])
         b = tf.tile(self.biases['gate'], [tf.shape(x)[0], 1])
@@ -124,7 +126,7 @@ class Model(object):
         self.init = tf.global_variables_initializer()
 
     def sample(self, sess, limit=100):
-        keys = ["talks", "ai", "entertainment", "robots", "science", "technology"]
+        keys = ["talks", "entertainment", "performance", "music"]
         keys = [[self.data.keys_index_map[key] for key in keys]]
 
         indexes = np.arange(0, self.config.vocab_size)

@@ -3,6 +3,9 @@ import traceback
 
 import reader
 import practical4
+import practical4v2
+
+impl = practical4
 
 
 class Batches(object):
@@ -39,14 +42,14 @@ class Batches(object):
 
 
 data = reader.get_generation_data(1585, 250, 250)
-config = practical4.Config(data)
+config = impl.Config(data)
 batches = Batches(data, config)
 batches.make_batches()
 
 def start():
-	importlib.reload(practical4)
+	importlib.reload(impl)
 	try:
-		model = practical4.Model(data, config)
+		model = impl.Model(data, config)
 		model.train()
 	except Exception as e:
 		traceback.print_exc()
