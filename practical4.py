@@ -125,8 +125,7 @@ class Model(object):
 
         self.init = tf.global_variables_initializer()
 
-    def sample(self, sess, limit=100):
-        keys = ["talks", "entertainment", "performance", "music"]
+    def sample(self, sess, limit=100, keys=["talks", "entertainment", "performance", "music"]):
         keys = [[self.data.keys_index_map[key] for key in keys]]
 
         indexes = np.arange(0, self.config.vocab_size)
@@ -247,7 +246,7 @@ class Model(object):
             print("Epoch %s complete, validation cost: %.2f, time: %.2fs, avg time for talk: %.3fs\n" % 
                     (step+1, cost, time() - start_epoch, (end_epoch - start_epoch)/len(self.data.batches_train)))
 
-            talk = self.sample(sess, limit=1000)
+            talk = self.sample(sess, limit=1500)
             print(talk, "\n")
             with open('talk'+str(step)+'.txt', 'w') as f:
                 f.write(talk)
@@ -257,6 +256,14 @@ class Model(object):
             sess.run(self.lr_update, feed_dict={self.new_lr: learning_rate})
 
         print("Finished in: %.3f"% (time() - start))
+        keys = ["talks", "business", "economics"]
+        res = self.sample(sess, limit=1500, keys=keys)
+        with open('talk_business.txt', 'w') as f:
+            f.write(talk)
+        keys = ["talks", "education", "technology"]
+        res = self.sample(sess, limit=1500, keys=keys)
+        with open('talk_edu.txt', 'w') as f:
+            f.write(talk)
         self.saver.save(sess, "model.ckpt")
         sess.close()
 
