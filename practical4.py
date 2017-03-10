@@ -198,7 +198,7 @@ class Model(object):
         sess = tf.Session()
         sess.run(self.init)
         sess.run(self.lr_update, feed_dict={self.new_lr: learning_rate})
-        self.saver.restore(sess, "./model.ckpt")
+        # self.saver.restore(sess, "./model.ckpt")
         print(self.sample(sess, limit=100))
         start = time()
 
@@ -238,7 +238,7 @@ class Model(object):
                     start_batch = time()
                     costs = 0
 
-                if (i+1) % step_size*5 == 0 and i != 0
+                if (i+1) % step_size*5 == 0 and i != 0:
                     print(self.sample(sess, limit=50))
 
             end_epoch = time()

@@ -115,38 +115,54 @@ def _to_vec_seq(word_to_id, talks, MAX_SIZE=None):
         return[[to_id(word) for i, word in enumerate(talk) if i < MAX_SIZE] for talk in talks]
 
 
-def _make_glove_embedding(words, keywords):
+def _make_glove_embedding(words, keywords, embedding_size=200):
     print("Loading GloVe...")
-    vocab = ["<pad>", "<unk>", "<START>", "<EOS>", "<END>"]
-    index_map = {
+    data = Data()
+    data.vocab = ["<pad>", "<unk>", "<START>", "<EOS>", "<END>"]
+    data.keys_vocab = ["<pad>", "<unk>"]
+    data.index_map = {
         "<pad>": 0,
         "<unk>": 1,
         "<START>": 2,
         "<EOS>": 3,
         "<END>": 4
     }
+    data.keys_index_map = {
+        "<pad>": 0,
+        "<unk>": 1
+    }
     index = 5
-    mat = [np.zeros(50, dtype=np.float32) for _ in range(5)]
+    data.E_talks =( [np.zeros(embedding_size, dtype=np.float32) for _ in range(2)] +
+            [2 * np.random.randn(embedding_size) for _ in range(3)])
+    with open('glove.6B.200d.txt', encoding='utf-8') as f:
+        for line in f:
+            vec = line.split()
+            word = vec.pop(0)
+            if word in words:
+                vec = np.array([float(r) for r in vec], dtype=np.float32)
+                data.E_talks.append(vec)
+                data.vocab.append(word)
+                data.index_map[word] = index
+                index += 1
+                
+
+    data.E_keywords = [np.zeros(50, dtype=np.float32) for _ in range(2)]
+    index = 2
     with open('glove.6B.50d.txt', encoding='utf-8') as f:
         for line in f:
             vec = line.split()
             word = vec.pop(0)
-            if word in words or word in keywords:
+            if word in keywords:
                 vec = np.array([float(r) for r in vec], dtype=np.float32)
-                index_map[word] = index
-                vocab.append(word)
+                data.E_keywords.append(vec)
+                data.keys_vocab.append(word)
+                data.keys_index_map[word] = index
                 index += 1
-                mat.append(vec)
 
-    for word in keywords:
-        if word not in vocab:
-            vec = 2 * np.random.randn(50)
-            index_map[word] = index
-            vocab.append(word)
-            index += 1
-            mat.append(vec)
+    data.E_talks = np.array(data.E_talks, dtype=np.float32)
+    data.E_keywords = np.array(data.E_keywords, dtype=np.float32)
 
-    return index_map, vocab, np.array(mat, dtype=np.float32)
+    return data
 
 
 def _make_random_embeddings(words, keywords, embedding_size=200):
@@ -270,18 +286,20 @@ def get_generation_data(n_train, n_validate, n_test, MAX_SIZE=None, voc_size=400
         with open('keywords_gen.json', 'w') as f:
             json.dump(keywords, f)
 
-    all_words = flatten(talks[:n_train])
-    counter = Counter(all_words)
-    words = [word for word, _ in counter.most_common(voc_size)]
-    del all_words, counter
-    print(len(words))
-    all_keys = flatten(keywords[:n_train])
-    counter = Counter(all_keys)
-    keys = [key for key, _ in counter.most_common(keys_voc_size)]
-    del all_keys, counter
-    print(len(keys))
+    words = set(flatten(talks[:n_train]))
+    keys = set(flatten(keywords[:n_train]))
+    # all_words = flatten(talks[:n_train])
+    # counter = Counter(all_words)
+    # words = [word for word, _ in counter.most_common(voc_size)]
+    # del all_words, counter
+    # print(len(words))
+    # all_keys = flatten(keywords[:n_train])
+    # counter = Counter(all_keys)
+    # keys = [key for key, _ in counter.most_common(keys_voc_size)]
+    # del all_keys, counter
+    # print(len(keys))
 
-    data = _make_random_embeddings(words, keys)
+    data = _make_glove_embedding(words, keys)
 
     keywords = _to_vec_seq(data.keys_index_map, keywords)
     talks = _to_vec_seq(data.index_map, talks, MAX_SIZE=MAX_SIZE)

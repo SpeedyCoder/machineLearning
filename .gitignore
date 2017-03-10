@@ -11,8 +11,9 @@ keywords_gen.json
 # Zip files
 *.zip
 
-# GloVe file
+# GloVe files
 glove.6B.50d.txt
+glove.6B.200d.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
