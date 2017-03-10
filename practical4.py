@@ -259,11 +259,11 @@ class Model(object):
         keys = ["talks", "business", "economics"]
         res = self.sample(sess, limit=1500, keys=keys)
         with open('talk_business.txt', 'w') as f:
-            f.write(talk)
+            f.write(res)
         keys = ["talks", "education", "technology"]
         res = self.sample(sess, limit=1500, keys=keys)
         with open('talk_edu.txt', 'w') as f:
-            f.write(talk)
+            f.write(res)
         self.saver.save(sess, "model.ckpt")
         sess.close()
 
