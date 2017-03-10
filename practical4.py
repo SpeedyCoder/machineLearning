@@ -71,11 +71,11 @@ class Model(object):
         x = tf.transpose(x, [1, 0, 2])
         x2 = tf.reduce_mean(x2, 1)
 
-        x2 = tf.reshape(x2, [-1, 1, config.keys_size])
-        x2 = tf.tile(x2, [1,tf.shape(x)[0] ,1])
-        x2 = tf.transpose(x2, [1, 0, 2])
-        # x2 = tf.reshape(x2, [1, -1, config.keys_size])
-        # x2 = tf.tile(x2, [tf.shape(x)[0], 1, 1])
+        # x2 = tf.reshape(x2, [-1, 1, config.keys_size])
+        # x2 = tf.tile(x2, [1,tf.shape(x)[0] ,1])
+        # x2 = tf.transpose(x2, [1, 0, 2])
+        x2 = tf.reshape(x2, [1, -1, config.keys_size])
+        x2 = tf.tile(x2, [tf.shape(x)[0], 1, 1])
 
         w = tf.tile(self.weights['gate'], [tf.shape(x)[0], 1, 1])
         b = tf.tile(self.biases['gate'], [tf.shape(x)[0], 1])
@@ -198,8 +198,8 @@ class Model(object):
         sess = tf.Session()
         sess.run(self.init)
         sess.run(self.lr_update, feed_dict={self.new_lr: learning_rate})
-        self.saver.restore(sess, "./model.ckpt")
-        print(self.sample(sess, limit=100))
+        # self.saver.restore(sess, "./model.ckpt")
+        # print(self.sample(sess, limit=100))
         start = time()
 
         for step in range(self.config.epochs):
@@ -238,8 +238,8 @@ class Model(object):
                     start_batch = time()
                     costs = 0
 
-                if (i+1) % step_size*5 == 0 and i != 0
-                    print(self.sample(sess, limit=50))
+                if (i+1) % (step_size*10) == 0 and i != 0:
+                    print(self.sample(sess, limit=100))
 
             end_epoch = time()
             print("-"*70)
